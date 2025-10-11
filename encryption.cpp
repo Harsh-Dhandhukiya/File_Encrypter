@@ -1,55 +1,74 @@
 #include "encryption.h"
 #include <fstream>
-#include <cctype> // To check the letter is in UPPERCASE or lowercase
 #include <iostream>
+#include <vector>
+#include <openssl/err.h>
 
 using namespace std;
 
-bool performCaesarCipher(string& content, bool encrypt)
+void handleErrors(void)
 {
-    // This line correctly sets the shift: +3 for encryption, -3 for decryption.
-    int shift = encrypt ? 3 : -3;
-
-    for (char& ch : content)
-    {
-        if (isalpha(ch))
-        {
-            char base = isupper(ch) ? 'A' : 'a';
-            // CORRECTED: The formula was flawed for decryption.
-            // The original code had '(encrypt ? shift : -shift)', which resulted in a positive 3 for decryption too (-(-3) = 3).
-            // The corrected formula now correctly applies the negative shift for decryption.
-            ch = (ch - base + shift + 26) % 26 + base;
-        }
-    }
-    return true;
+    ERR_print_errors_fp(stderr);
+    abort();
 }
 
-bool encryptFile(const string& filename, bool encrypt)
+bool file_encrypt_decrypt_aes(const std::string& input_file, const std::string& output_file,
+                              const unsigned char* key, const unsigned char* iv, int do_encrypt,
+                              const EVP_CIPHER *cipher_type)
 {
-    ifstream inputFile(filename);
-    if (!inputFile.is_open())
-    {
-        // CLEANUP: Removed redundant cout from here. Main function will report the error.
+    ifstream in_file(input_file, ios::binary);
+    if (!in_file) {
+        cerr << "Error: Cannot open input file: " << input_file << endl;
         return false;
     }
 
-    string content((istreambuf_iterator<char>(inputFile)), istreambuf_iterator<char>());
-    inputFile.close();
+    ofstream out_file(output_file, ios::binary);
+    if (!out_file) {
+        cerr << "Error: Cannot open output file: " << output_file << endl;
+        return false;
+    }
 
-    if (performCaesarCipher(content, encrypt))
-    {
-        // During decryption, creates a new file with .dec extension (e.g., from 'file.txt.enc' to 'file.txt.enc.dec')
-        ofstream outputFile(filename + (encrypt ? ".enc" : ".dec"));
-        if (!outputFile.is_open())
-        {
-            return false;
+    EVP_CIPHER_CTX *ctx;
+    int len;
+    const int buffer_size = 4096;
+    vector<unsigned char> in_buffer(buffer_size);
+    vector<unsigned char> out_buffer(buffer_size + EVP_MAX_BLOCK_LENGTH);
+
+    // Create and initialise the context
+    if(!(ctx = EVP_CIPHER_CTX_new())) {
+        handleErrors();
+    }
+
+    // Initialise the encryption/decryption operation.
+    if(1 != EVP_CipherInit_ex(ctx, cipher_type, NULL, key, iv, do_encrypt)) {
+        handleErrors();
+    }
+
+    // Process the file in chunks
+    while(in_file.read(reinterpret_cast<char*>(in_buffer.data()), buffer_size)) {
+        int bytes_read = in_file.gcount();
+        if(1 != EVP_CipherUpdate(ctx, out_buffer.data(), &len, in_buffer.data(), bytes_read)) {
+            handleErrors();
         }
-        outputFile << content;
-        outputFile.close();
-        return true;
+        out_file.write(reinterpret_cast<char*>(out_buffer.data()), len);
     }
-    else
-    {
-        return false;
+    
+    // Process the final block if the file was not a multiple of the buffer size
+    int bytes_read = in_file.gcount();
+    if (bytes_read > 0) {
+        if(1 != EVP_CipherUpdate(ctx, out_buffer.data(), &len, in_buffer.data(), bytes_read)) {
+            handleErrors();
+        }
+        out_file.write(reinterpret_cast<char*>(out_buffer.data()), len);
     }
+
+    // Finalise the operation.
+    if(1 != EVP_CipherFinal_ex(ctx, out_buffer.data(), &len)) {
+        handleErrors();
+    }
+    out_file.write(reinterpret_cast<char*>(out_buffer.data()), len);
+
+    // Clean up
+    EVP_CIPHER_CTX_free(ctx);
+    return true;
 }

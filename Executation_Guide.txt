@@ -1,9 +1,4 @@
->> In Code Editors Terminal <<
-
-1.) g++ main.cpp encryption.cpp -o run
-2.) ./run 
-
 >> In gerna; Command Line Terminal <<
 
-1.) g++ main.cpp encryption.cpp -o run
-2.) run
+1.) make
+2.) file_encrypter

@@ -1,4 +1,35 @@
->> In gerna; Command Line Terminal <<
+>> In general; Command Line Terminal <<
 
 1.) make
 2.) file_encrypter
+
+3.) The program will show you a menu. Choose option 1 - To generate Public and Private keys for RSA.
+--> Provide filenames for your keys. It's common practice to use the .pem extension.
+    *Enter filename for public key (e.g., public.pem): public.pem
+    *Enter filename for private key (e.g., private.pem): private.pem
+
+4.) Encrypt a File with the Hybrid Model (Mode 2)
+    Now, let's encrypt the filename.txt file using the public key you just created.
+
+--> Run programe again # file_encrypter
+--> Enter your choice: 2 # 2. Encrypt a File (Hybrid)
+--> Provide the necessary files:
+    *Enter the name of the file to encrypt: filename.txt
+    *Enter the public key file to use (e.g., public.pem): public.pem
+
+--> Check the Output: The program will perform the hybrid encryption. You will now have two new encrypted files.
+    ex. filename.txt.enc & filename.txt.key.enc
+
+--> To send your secret report to someone, you would send them both filename.txt.enc and filename.txt.key.enc.
+
+5.) Decrypt the File with the Hybrid Model (Mode 3)
+--> Run programe again # file_encrypter
+--> Enter your choice: 3 # 3. Decrypt a File (Hybrid)
+--> Provide the necessary files:
+    *Enter the name of the file to decrypt (e.g., filename.txt.enc)
+    *Enter the private key file to use (e.g., private.pem): private.pem
+
+--> Final Verification: The program will use your private key to decrypt filename.txt.key.enc, retrieve the AES key, and then use that key to decrypt report.txt.enc. A new file will be created:
+    ex. filename.txt.enc.dec
+
+--> Open this file. You will see your original message

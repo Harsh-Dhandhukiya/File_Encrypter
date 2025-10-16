@@ -1,106 +1,144 @@
 #include <iostream>
 #include "encryption.h"
 #include <string>
-#include <openssl/rand.h>
+#include <vector>
 #include <fstream>
+#include <openssl/rand.h>
 
 using namespace std;
 
-// Helper function to save the binary key/IV to a file
-void save_key_iv(const string& filename, const unsigned char* data, size_t len) {
-    ofstream file(filename, ios::binary);
-    file.write(reinterpret_cast<const char*>(data), len);
-}
-
-// Helper function to load the binary key/IV from a file
-void load_key_iv(const string& filename, unsigned char* data, size_t len) {
+// Helper function to read an entire file into a vector
+vector<unsigned char> read_file(const string& filename) {
     ifstream file(filename, ios::binary);
     if (!file) {
-        cerr << "Error: Cannot open key/IV file: " << filename << ". Ensure it exists for decryption." << endl;
-        exit(1); // Exit if key file is missing for decryption
+        cerr << "Error: Cannot open file: " << filename << endl;
+        return {};
     }
-    file.read(reinterpret_cast<char*>(data), len);
+    return vector<unsigned char>((istreambuf_iterator<char>(file)), istreambuf_iterator<char>());
 }
 
-int main()
-{
-    cout << "--- AES File Encrypter ---" << endl;
-    cout << "Encrypt or Decrypt (E/D)?: ";
-    char mode;
-    cin >> mode;
-    
-    cout << "Enter the input file name: ";
-    string filename;
-    getline(cin >> ws, filename);
+// Helper function to write a vector to a file
+void write_file(const string& filename, const vector<unsigned char>& data) {
+    ofstream file(filename, ios::binary);
+    file.write(reinterpret_cast<const char*>(data.data()), data.size());
+}
 
-    cout << "Choose AES mode (E for ECB, C for CBC): ";
-    char aes_mode_choice;
-    cin >> aes_mode_choice;
+void generate_keys_workflow() {
+    string pub_key_file, priv_key_file;
+    cout << "Enter filename for public key (e.g., public.pem): ";
+    cin >> pub_key_file;
+    cout << "Enter filename for private key (e.g., private.pem): ";
+    cin >> priv_key_file;
 
-    const EVP_CIPHER *cipher_type;
-    if (aes_mode_choice == 'E' || aes_mode_choice == 'e') {
-        cipher_type = EVP_aes_256_ecb();
-    } else if (aes_mode_choice == 'C' || aes_mode_choice == 'c') {
-        cipher_type = EVP_aes_256_cbc();
+    if (generate_rsa_keys(pub_key_file, priv_key_file)) {
+        cout << "Successfully generated RSA keys." << endl;
     } else {
-        cout << "Invalid AES mode selected." << endl;
-        return 1;
+        cout << "Error: Failed to generate RSA keys." << endl;
     }
+}
+
+void hybrid_encrypt_workflow() {
+    string input_file, pub_key_file;
+    cout << "Enter the name of the file to encrypt: ";
+    getline(cin >> ws, input_file);
+    cout << "Enter the public key file to use (e.g., public.pem): ";
+    cin >> pub_key_file;
     
-    unsigned char key[32]; // AES-256 key
-    unsigned char iv[16];  // AES block size
-    string keyfilename, ivfilename, outfilename;
-
-    if (mode == 'E' || mode == 'e')
-    {
-        keyfilename = filename + ".key";
-        ivfilename = filename + ".iv";
-        outfilename = filename + ".enc";
-
-        // Generate a random key and IV for encryption
-        if (!RAND_bytes(key, sizeof(key)) || !RAND_bytes(iv, sizeof(iv))) {
-            cerr << "Error generating random key/IV." << endl;
-            return 1;
-        }
-
-        save_key_iv(keyfilename, key, sizeof(key));
-        save_key_iv(ivfilename, iv, sizeof(iv));
-        cout << "Key and IV saved to " << keyfilename << " and " << ivfilename << endl;
-
-        if(file_encrypt_decrypt_aes(filename, outfilename, key, iv, 1, cipher_type)) {
-            cout << "File encrypted successfully to " << outfilename << endl;
-        } else {
-            cout << "Error: File encryption failed." << endl;
-        }
+    // 1. Generate one-time AES key and IV
+    unsigned char aes_key[32];
+    unsigned char iv[16];
+    if (!RAND_bytes(aes_key, sizeof(aes_key)) || !RAND_bytes(iv, sizeof(iv))) {
+        cerr << "Error generating random AES key/IV." << endl;
+        return;
     }
-    else if (mode == 'D' || mode == 'd')
-    {
-        // --- FIX: Logic to find the correct key/iv files ---
-        string base_filename = filename;
-        size_t pos = base_filename.rfind(".enc");
-        if (pos != string::npos) {
-            base_filename.erase(pos, 4);
-        }
-        
-        keyfilename = base_filename + ".key";
-        ivfilename = base_filename + ".iv";
-        // ---------------------------------------------------
-        
-        outfilename = filename + ".dec";
 
-        // Load the key and IV from files for decryption
-        load_key_iv(keyfilename, key, sizeof(key));
-        load_key_iv(ivfilename, iv, sizeof(iv));
-        
-        if(file_encrypt_decrypt_aes(filename, outfilename, key, iv, 0, cipher_type)) {
-            cout << "File decrypted successfully to " << outfilename << endl;
-        } else {
-            cout << "Error: File decryption failed." << endl;
-        }
+    // Combine key and IV for RSA encryption
+    vector<unsigned char> key_iv_to_encrypt;
+    key_iv_to_encrypt.insert(key_iv_to_encrypt.end(), aes_key, aes_key + sizeof(aes_key));
+    key_iv_to_encrypt.insert(key_iv_to_encrypt.end(), iv, iv + sizeof(iv));
+
+    // 2. Encrypt AES key+IV using RSA public key
+    vector<unsigned char> encrypted_aes_key;
+    if (!rsa_encrypt(pub_key_file, key_iv_to_encrypt, encrypted_aes_key)) {
+        cerr << "Error: RSA encryption of AES key failed." << endl;
+        return;
     }
-    else
-    {
-        cout << "Error: Invalid mode selected. Please enter E or D." << endl;
+    write_file(input_file + ".key.enc", encrypted_aes_key);
+    cout << "AES key encrypted and saved to " << input_file << ".key.enc" << endl;
+
+    // 3. Encrypt the file using AES
+    if (file_encrypt_decrypt_aes(input_file, input_file + ".enc", aes_key, iv, 1, EVP_aes_256_cbc())) {
+        cout << "File successfully encrypted to " << input_file << ".enc" << endl;
+    } else {
+        cout << "Error: AES file encryption failed." << endl;
+    }
+}
+
+void hybrid_decrypt_workflow() {
+    string input_file, priv_key_file;
+    cout << "Enter the name of the file to decrypt (e.g., file.txt.enc): ";
+    getline(cin >> ws, input_file);
+    cout << "Enter the private key file to use (e.g., private.pem): ";
+    cin >> priv_key_file;
+
+    // 1. Decrypt the AES key+IV using RSA private key
+    string encrypted_key_file = input_file;
+    size_t pos = encrypted_key_file.rfind(".enc");
+    if (pos != string::npos) {
+        encrypted_key_file.erase(pos);
+    }
+    encrypted_key_file += ".key.enc";
+    
+    vector<unsigned char> encrypted_aes_key = read_file(encrypted_key_file);
+    if (encrypted_aes_key.empty()) return;
+
+    vector<unsigned char> decrypted_key_iv;
+    if (!rsa_decrypt(priv_key_file, encrypted_aes_key, decrypted_key_iv)) {
+        cerr << "Error: RSA decryption of AES key failed. (Check private key)" << endl;
+        return;
+    }
+    if (decrypted_key_iv.size() != 48) { // 32 for key + 16 for IV
+        cerr << "Error: Decrypted key size is incorrect." << endl;
+        return;
+    }
+
+    // 2. Extract AES key and IV
+    unsigned char aes_key[32];
+    unsigned char iv[16];
+    copy(decrypted_key_iv.begin(), decrypted_key_iv.begin() + 32, aes_key);
+    copy(decrypted_key_iv.begin() + 32, decrypted_key_iv.end(), iv);
+
+    // 3. Decrypt the file using AES
+    string output_file = input_file + ".dec";
+    if (file_encrypt_decrypt_aes(input_file, output_file, aes_key, iv, 0, EVP_aes_256_cbc())) {
+        cout << "File successfully decrypted to " << output_file << endl;
+    } else {
+        cout << "Error: AES file decryption failed." << endl;
+    }
+}
+
+int main() {
+    int choice;
+    cout << "--- File Encrypter: Phase 3 (RSA+AES Hybrid) ---" << endl;
+    cout << "1. Generate RSA Key Pair" << endl;
+    cout << "2. Encrypt a File (Hybrid)" << endl;
+    cout << "3. Decrypt a File (Hybrid)" << endl;
+    cout << "Enter your choice: ";
+    cin >> choice;
+
+    switch (choice) {
+        case 1:
+            generate_keys_workflow();
+            break;
+        case 2:
+            hybrid_encrypt_workflow();
+            break;
+        case 3:
+            hybrid_decrypt_workflow();
+            break;
+        default:
+            cout << "Invalid choice." << endl;
+            break;
     }
 
     return 0;

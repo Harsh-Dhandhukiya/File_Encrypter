@@ -5,26 +5,36 @@
 #include <vector>
 #include <openssl/evp.h>
 
-// --- General & AES Functions (Phase 2) ---
+// --- High-Level Workflow Functions (Phase 4) ---
+
+/**
+ * @brief Generates an RSA key pair and saves them to PEM files.
+ * @param pub_key_file Path to save the public key.
+ * @param priv_key_file Path to save the private key.
+ * @return True on success, false on failure.
+ */
+bool generate_rsa_keys(const std::string& pub_key_file, const std::string& priv_key_file);
+
+/**
+ * @brief Encrypts a file using a hybrid AES+RSA scheme.
+ * @param input_file The file to encrypt.
+ * @param pub_key_file The RSA public key to use for encrypting the session key.
+ * @return True on success, false on failure.
+ */
+bool hybrid_encrypt(const std::string& input_file, const std::string& pub_key_file);
+
+/**
+ * @brief Decrypts a file encrypted with the hybrid scheme.
+ * @param input_file The encrypted file (e.g., file.txt.enc).
+ * @param priv_key_file The RSA private key for decrypting the session key.
+ * @return True on success, false on failure.
+ */
+bool hybrid_decrypt(const std::string& input_file, const std::string& priv_key_file);
+
+
+// --- Internal Helper Functions ---
 
 // Handles OpenSSL errors.
 void handleErrors(void);
-
-// Performs AES file encryption or decryption.
-bool file_encrypt_decrypt_aes(const std::string& input_file, const std::string& output_file,
-                              const unsigned char* key, const unsigned char* iv, int do_encrypt,
-                              const EVP_CIPHER *cipher_type);
-
-// --- RSA Functions (Phase 3) ---
-
-// Generates an RSA key pair and saves them to the specified files.
-bool generate_rsa_keys(const std::string& pub_key_file, const std::string& priv_key_file);
-
-// Encrypts data using an RSA public key.
-bool rsa_encrypt(const std::string& pub_key_file, const std::vector<unsigned char>& plain_text, std::vector<unsigned char>& encrypted_text);
-
-// Decrypts data using an RSA private key.
-bool rsa_decrypt(const std::string& priv_key_file, const std::vector<unsigned char>& encrypted_text, std::vector<unsigned char>& decrypted_text);
-
 
 #endif // ENCRYPTION_H

@@ -38,4 +38,4 @@ $(TARGET): $(OBJS)
 
 # Rule to clean up
 clean:
-	rm -f $(OBJS) $(TARGET) *.enc *.dec *.key *.iv
+	rm -f $(OBJS) $(TARGET) *.enc *.dec *.key *.iv *.pem

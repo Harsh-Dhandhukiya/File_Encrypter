@@ -38,12 +38,38 @@ void decrypt_workflow() {
     hybrid_decrypt(input_file, priv_key_file);
 }
 
+void disguise_workflow() {
+    string input_file, pub_key_file, output_file;
+    cout << "Enter the original file to encrypt and disguise: ";
+    getline(cin >> ws, input_file);
+    cout << "Enter the public key file: ";
+    cin >> pub_key_file;
+    cout << "Enter the final disguised filename (e.g., fake_image.jpg): ";
+    cin >> output_file;
+
+    disguise_file(input_file, pub_key_file, output_file);
+}
+
+void reveal_workflow() {
+    string disguised_file, priv_key_file, output_file;
+    cout << "Enter the disguised file to reveal: ";
+    getline(cin >> ws, disguised_file);
+    cout << "Enter the private key file: ";
+    cin >> priv_key_file;
+    cout << "Enter the filename for the revealed content: ";
+    cin >> output_file;
+    
+    reveal_file(disguised_file, priv_key_file, output_file);
+}
+
 int main() {
     int choice;
-    cout << "--- File Encrypter: Phase 4 (Refined Workflow) ---" << endl;
+    cout << "--- File Encrypter ---" << endl;
     cout << "1. Generate RSA Key Pair" << endl;
-    cout << "2. Encrypt a File" << endl;
-    cout << "3. Decrypt a File" << endl;
+    cout << "2. Encrypt a File (Standard)" << endl;
+    cout << "3. Decrypt a File (Standard)" << endl;
+    cout << "4. Encrypt & Disguise a File" << endl;
+    cout << "5. Reveal & Decrypt a File" << endl;
     cout << "Enter your choice: ";
     cin >> choice;
 
@@ -56,6 +82,12 @@ int main() {
             break;
         case 3:
             decrypt_workflow();
+            break;
+        case 4:
+            disguise_workflow();
+            break;
+        case 5:
+            reveal_workflow();
             break;
         default:
             cout << "Invalid choice." << endl;
